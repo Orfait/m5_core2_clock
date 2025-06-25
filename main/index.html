@@ -1,0 +1,204 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark" />
+    <link rel="stylesheet" type="text/css" href="pico.min.css">
+    <title>Alarm Clock</title>
+</head>
+
+<body>
+    <main class="container">
+        <article>
+            <form id="mode" method="POST">
+                <select aria-label="Select your favorite cuisine..." name="mode" onchange="submitForm(event)">
+                    <option value="auto">Automatic</option>
+                    <option value="day">Day</option>
+                    <option value="night">Night</option>
+                    <option value="nap">Nap</option>
+                </select>
+            </form>
+        </article>
+        <article>
+            <form method="POST">
+                <div class="grid">
+                    <label>
+                        <input type="checkbox" name="school" role="switch" onchange="submitForm(event)" />
+                        School planning
+                    </label>
+                </div>
+            </form>
+        </article>
+        <article>
+            <form id="settime_night_start" method="POST">
+                <label>Night start
+                    <input type="time" name="night_start" onchange="submitForm(event)" />
+                </label>
+            </form>
+            <form id="settime_night_end" method="POST">
+                <label>Night end
+                    <input type="time" name="night_end" onchange="submitForm(event)" />
+                </label>
+            </form>
+            <form id="settime_night_end_school" method="POST">
+                <label>Night end for school day
+                    <input type="time" name="night_end_school" onchange="submitForm(event)" />
+                </label>
+            </form>
+        </article>
+        <article>
+            <form id="settime_nap_start" method="POST">
+                <label>Nap start
+                    <input type="time" name="nap_start" onchange="submitForm(event)" />
+                </label>
+            </form>
+            <form id="settime_nap_end" method="POST">
+                <label>Nap end
+                    <input type="time" name="nap_end" onchange="submitForm(event)" />
+                </label>
+            </form>
+        </article>
+        <hr />
+        <details>
+            <summary role="button" class="outline">MQTT</summary>
+            <form id="setmqtt" method="POST">
+                <div>
+                    <label>MQTT Broker
+                        <input type="text" name="mqtt" required />
+                    </label>
+                    <button type="submit" onclick="submitForm(event)">Set MQTT Broker</button>
+                </div>
+            </form>
+        </details>
+        <hr />
+        <details>
+            <summary role="button" class="outline">WiFi</summary>
+            <form id="setwifi" method="POST">
+                <div>
+                    <label>SSID
+                        <input type="text" name="ssid" required />
+                    </label>
+                    <label>Key
+                        <input type="password" name="pass" required>
+                    </label>
+                    <button type="submit" onclick="submitForm(event)">Set WiFi</button>
+                </div>
+            </form>
+        </details>
+        <hr />
+        <details>
+            <summary role="button" class="outline">Time</summary>
+            <form id="settime" method="POST">
+                <div>
+                    <input type="time" name="time" required />
+                    <button type="submit" onclick="submitForm(event)">Set Time</button>
+                </div>
+            </form>
+        </details>
+        <hr />
+        <details>
+            <summary role="button" class="outline">Firmware Update</summary>
+            <div><label>Firmware file:<input type="file" id="otafile" name="otafile" /></label></div>
+            <div><button id="upload" type="button" onclick="startUpload()">Upload</button></div>
+            <progress id="progress" value="0" max="100"></progress>
+        </details>
+
+
+    </main>
+    <script>
+        function autoFill(data) {
+            for (const property in data) {
+                let formElement = document.getElementsByName(property)[0];
+                switch (formElement.type) {
+                    case 'checkbox':
+                        formElement.checked = data[property];
+                        break;
+                    default:
+                        formElement.value = data[property];
+                        break;
+                }
+            }
+        }
+
+        function submitForm(e) {
+            e.preventDefault();
+            const form = e.target.form;
+            let jsonData = {};
+            for (var i = 0; i < form.elements.length; i++) {
+                var element = form.elements[i];
+                if (element.name) {
+                    switch (element.type) {
+                        case 'checkbox':
+                            jsonData[element.name] = element.checked;
+                            break;
+                        default:
+                            jsonData[element.name] = element.value;
+                            break;
+                    }
+
+                }
+            }
+            var jsonDataString = JSON.stringify(jsonData);
+
+            fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: jsonDataString
+            })
+                .then(response => response.json())
+                .then(data => autoFill(data));
+        }
+
+        function startUpload() {
+            var otafile = document.getElementById("otafile").files;
+            if (otafile.length == 0) {
+                alert("No file selected!");
+            } else {
+                document.getElementById("otafile").disabled = true;
+                document.getElementById("upload").disabled = true;
+                document.getElementById("upload").ariaBusy = true;
+                var file = otafile[0];
+                var xhr = new XMLHttpRequest();
+                xhr.onreadystatechange = function () {
+                    if (xhr.readyState == 4) {
+                        if (xhr.status == 200) {
+                            document.open();
+                            document.write(xhr.responseText);
+                            document.close();
+                        } else if (xhr.status == 0) {
+                            alert("Server closed the connection abruptly!");
+                            location.reload()
+                        } else {
+                            alert(xhr.status + " Error!\\n" + xhr.responseText);
+                            location.reload()
+                        }
+                    }
+                };
+                xhr.upload.onprogress = function (e) {
+                    var progress = document.getElementById("progress");
+                    progress.value = (e.loaded / e.total * 100).toFixed(0);
+                };
+                xhr.open("POST", "/update", true);
+                xhr.send(file);
+            }
+        }
+
+        function refresh() {
+            fetch("/index.html", {
+                method: 'POST'
+            })
+                .then(response => response.json())
+                .then(data => autoFill(data));
+        }
+
+        document.addEventListener("DOMContentLoaded", function (event) {
+            refresh();
+        });
+    </script>
+</body>
+
+</html>
